@@ -16,7 +16,7 @@ import bleach
 import os
 
 app = Flask(__name__)
-app.config['SECRET_KEY'] = os.environ.get("SECRET_KEY")
+app.config['SECRET_KEY'] = os.environ.get("SECRET_KEY", "sqlite:///blog.db")
 ckeditor = CKEditor(app)
 Bootstrap(app)
 app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get("DATABASE_URL")
@@ -98,6 +98,7 @@ class Comment(db.Model, Base):
     parent_post = relationship("BlogPost", back_populates="comments")
     post_id = db.Column(db.Integer, db.ForeignKey("blog_posts.id"))
     text = db.Column(db.Text, nullable=False)
+db.create_all()
 
 
 @app.route('/')
