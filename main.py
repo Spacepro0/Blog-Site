@@ -20,6 +20,7 @@ app.config['SECRET_KEY'] = os.environ.get("SECRET_KEY", "sqlite:///blog.db")
 ckeditor = CKEditor(app)
 Bootstrap(app)
 app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get("DATABASE_URL")
+# app.config['SQLALCHEMY_DATABASE_URI'] = "sqlite:///blog.db"
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 db = SQLAlchemy(app)
 login_manager = LoginManager()
@@ -39,6 +40,12 @@ def admin_only(f):
         #Otherwise continue with the route function
         return f(*args, **kwargs)
     return decorated_function
+
+
+def owner_of_post(post):
+    if post.author == current_user:
+        return True
+    return False
 
 
 @login_manager.user_loader
@@ -98,7 +105,7 @@ class Comment(db.Model, Base):
     parent_post = relationship("BlogPost", back_populates="comments")
     post_id = db.Column(db.Integer, db.ForeignKey("blog_posts.id"))
     text = db.Column(db.Text, nullable=False)
-db.create_all()
+# db.create_all()
 
 
 @app.route('/')
@@ -195,7 +202,6 @@ def contact():
 
 @app.route("/new-post", methods=["POST", "GET"])
 @login_required
-@admin_only
 def add_new_post():
     form = CreatePostForm()
     c_date = date.today().strftime("%Y")
@@ -217,37 +223,41 @@ def add_new_post():
 
 @app.route("/edit-post/<int:post_id>", methods=["POST", "GET"])
 @login_required
-@admin_only
 def edit_post(post_id):
     c_date = date.today().strftime("%Y")
     post = BlogPost.query.get(post_id)
-    edit_form = CreatePostForm(
-        title=post.title,
-        subtitle=post.subtitle,
-        img_url=post.img_url,
-        author=post.author,
-        body=post.body
-    )
-    if edit_form.validate_on_submit():
-        post.title = edit_form.title.data
-        post.subtitle = edit_form.subtitle.data
-        post.img_url = edit_form.img_url.data
-        post.body = strip_invalid_html(edit_form.body.data)
-        db.session.commit()
-        return redirect(url_for("show_post", post_id=post.id))
+    if owner_of_post(post):
+        edit_form = CreatePostForm(
+            title=post.title,
+            subtitle=post.subtitle,
+            img_url=post.img_url,
+            author=post.author,
+            body=post.body
+        )
+        if edit_form.validate_on_submit():
+            post.title = edit_form.title.data
+            post.subtitle = edit_form.subtitle.data
+            post.img_url = edit_form.img_url.data
+            post.body = strip_invalid_html(edit_form.body.data)
+            db.session.commit()
+            return redirect(url_for("show_post", post_id=post.id))
 
-    return render_template("make-post.html", form=edit_form, logged_in=current_user.is_authenticated, c_date=c_date)
+        return render_template("make-post.html", form=edit_form, logged_in=current_user.is_authenticated, c_date=c_date)
+    else:
+        return abort(403)
 
 
 @app.route("/delete/<int:post_id>")
 @login_required
-@admin_only
 def delete_post(post_id):
     post_to_delete = BlogPost.query.get(post_id)
-    db.session.delete(post_to_delete)
-    db.session.commit()
+    if owner_of_post(post_to_delete):
+        db.session.delete(post_to_delete)
+        db.session.commit()
+    else:
+        return abort(403)
     return redirect(url_for('get_all_posts'))
 
 
 if __name__ == "__main__":
-    app.run(debug=True)
+    app.run()
